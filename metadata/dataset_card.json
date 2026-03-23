@@ -1,0 +1,12 @@
+{
+  "dataset_name": "CAMELS-US",
+  "description": "Hydrometeorological and streamflow time series for 671 US basins.",
+  "application_domain": "Nature",
+  "number_of_variables": 3,
+  "number_of_locations": null,
+  "number_of_time_points": null,
+  "time_interval": "daily",
+  "data_link": "https://zenodo.org/records/15529996",
+  "license_information": "CC-BY-4.0",
+  "comments": "Project uses CSV input with columns Year_Mnth_Day, basin_id, PRCP(mm/day), Tmean(C), QObs(mm/d); benchmarking is univariate on QObs(mm/d)."
+}

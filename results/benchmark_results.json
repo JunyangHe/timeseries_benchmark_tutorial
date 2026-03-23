@@ -1,0 +1,16 @@
+{
+  "dataset_name": "CAMELS-US",
+  "model_name": "chronos-2",
+  "target_variable": "QObs(mm/d)",
+  "lookback_window": 30,
+  "forecast_horizon": 1,
+  "model_parameters": {
+    "prediction_length": 1,
+    "quantile_levels": [
+      0.5
+    ],
+    "device_preference": "cuda_if_available_else_cpu"
+  },
+  "rmse": null,
+  "notes": "Template file. Run notebooks/final_benchmark_colab.ipynb to populate rmse and evaluation details."
+}

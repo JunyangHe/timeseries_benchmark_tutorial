@@ -1,0 +1,21 @@
+{
+  "model_name": "chronos-2",
+  "model_link": "https://huggingface.co/amazon/chronos-2",
+  "task_type": "single_step_forecasting",
+  "target_variable": "QObs(mm/d)",
+  "input_mode": "univariate",
+  "lookback_window": 30,
+  "forecast_horizon": 1,
+  "evaluation_metrics": [
+    "rmse"
+  ],
+  "execution_environment": "Google Colab (GPU preferred, CPU fallback)",
+  "reference_baseline_for_skill_score": "not_used",
+  "model_parameters": {
+    "prediction_length": 1,
+    "quantile_levels": [
+      0.5
+    ],
+    "device_preference": "cuda_if_available_else_cpu"
+  }
+}
