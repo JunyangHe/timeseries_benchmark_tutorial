@@ -60,6 +60,7 @@ def rolling_one_step_predictions(
     lookback_window: int = 30,
     quantile_levels: List[float] | None = None,
     debug_first_n: int = 0,
+    allow_test_cold_start: bool = True,
 ) -> pd.DataFrame:
     """
     Run rolling one-step predictions per basin with observed-history updates.
@@ -79,15 +80,31 @@ def rolling_one_step_predictions(
     hist_by_id = {k: g.copy() for k, g in context_df.groupby("id", sort=False)}
     out_rows = []
     debug_logs = []
+    seeded_from_test_basins = 0
+    skipped_no_history_basins = 0
 
     # Iterate per basin and roll forward using actual past observations.
     for basin_id, g_test in tqdm(test_df.groupby("id", sort=False), desc="Rolling inference"):
         history = hist_by_id.get(basin_id, pd.DataFrame(columns=["id", "timestamp", "target"]))
         history = history.sort_values("timestamp").reset_index(drop=True)
-        if history.empty:
-            continue
+        g_test = g_test.sort_values("timestamp").reset_index(drop=True)
 
-        for step_idx, (_, row) in enumerate(g_test.iterrows()):
+        # For location-holdout setups there may be no context rows for test IDs.
+        # Seed history from the first lookback_window test points, then evaluate the remainder.
+        if history.empty and allow_test_cold_start:
+            if len(g_test) <= lookback_window:
+                skipped_no_history_basins += 1
+                continue
+            history = g_test.iloc[:lookback_window][["id", "timestamp", "target"]].copy()
+            eval_rows = g_test.iloc[lookback_window:]
+            seeded_from_test_basins += 1
+        elif history.empty:
+            skipped_no_history_basins += 1
+            continue
+        else:
+            eval_rows = g_test
+
+        for step_idx, (_, row) in enumerate(eval_rows.iterrows()):
             context_slice = history.tail(lookback_window)
             pred_df = pipeline.predict_df(
                 context_slice,
@@ -149,4 +166,12 @@ def rolling_one_step_predictions(
         print("Rolling inference debug samples:")
         for item in debug_logs:
             print(item)
+    print(
+        "Rolling inference summary:",
+        {
+            "predictions": len(out_df),
+            "seeded_from_test_basins": seeded_from_test_basins,
+            "skipped_no_history_basins": skipped_no_history_basins,
+        },
+    )
     return out_df
