@@ -77,6 +77,38 @@ def chronological_split_by_id(
     }
 
 
+def location_holdout_split(
+    df: pd.DataFrame,
+    id_col: str,
+    train_location_ratio: float = 0.8,
+    random_seed: int = 42,
+) -> Dict[str, pd.DataFrame]:
+    """
+    Split by location IDs (e.g., basin_id), not by time.
+
+    - Randomly select (1 - train_location_ratio) of unique IDs for test.
+    - All rows from selected test IDs go to test split.
+    - Remaining IDs go to train split.
+    - Validation is returned as an empty dataframe for compatibility.
+    """
+    if not (0.0 < train_location_ratio < 1.0):
+        raise ValueError("train_location_ratio must be between 0 and 1.")
+
+    unique_ids = df[id_col].dropna().drop_duplicates().sample(frac=1.0, random_state=random_seed)
+    n_ids = len(unique_ids)
+    n_train = max(1, int(round(n_ids * train_location_ratio)))
+    n_train = min(n_train, n_ids - 1)
+
+    train_ids = set(unique_ids.iloc[:n_train].tolist())
+    test_ids = set(unique_ids.iloc[n_train:].tolist())
+
+    train_df = df[df[id_col].isin(train_ids)].copy()
+    test_df = df[df[id_col].isin(test_ids)].copy()
+    val_df = df.iloc[0:0].copy()
+
+    return {"train": train_df, "val": val_df, "test": test_df}
+
+
 def to_chronos_df(
     df: pd.DataFrame,
     id_col: str,
