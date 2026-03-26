@@ -1,29 +1,56 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional, Tuple
 
 import pandas as pd
 from tqdm.auto import tqdm
 
 
-def _extract_point_forecast(pred_df: pd.DataFrame) -> float:
-    """Extract a single point forecast from Chronos prediction output."""
+def _extract_point_forecast(pred_df: pd.DataFrame) -> Tuple[float, Optional[pd.Timestamp], str]:
+    """Extract one-step point forecast and metadata from Chronos output."""
     if pred_df.empty:
         raise ValueError("Chronos returned an empty prediction dataframe.")
 
-    candidate_cols = ["0.5", "median", "mean", "prediction", "target"]
-    for col in candidate_cols:
-        if col in pred_df.columns:
-            return float(pred_df.iloc[0][col])
+    row = pred_df.iloc[-1]
 
-    # Fallback: first numeric non-id/time column.
-    skip_cols = {"id", "item_id", "timestamp", "ds"}
-    numeric_cols = [
-        c for c in pred_df.columns if c not in skip_cols and pd.api.types.is_numeric_dtype(pred_df[c])
-    ]
-    if not numeric_cols:
-        raise ValueError(f"Could not infer prediction column from {list(pred_df.columns)}")
-    return float(pred_df.iloc[0][numeric_cols[0]])
+    # Common Chronos outputs include quantile columns; prefer median forecast.
+    if 0.5 in pred_df.columns:
+        pred_col = 0.5
+        y_hat = float(row[pred_col])
+    elif "0.5" in pred_df.columns:
+        pred_col = "0.5"
+        y_hat = float(row[pred_col])
+    else:
+        candidate_cols = ["median", "mean", "prediction", "pred"]
+        pred_col = None
+        for col in candidate_cols:
+            if col in pred_df.columns:
+                pred_col = col
+                break
+
+        if pred_col is None:
+            # Fallback: first numeric non-id/time column. Explicitly avoid "target".
+            skip_cols = {"id", "item_id", "timestamp", "ds", "target"}
+            numeric_cols = [
+                c
+                for c in pred_df.columns
+                if c not in skip_cols and pd.api.types.is_numeric_dtype(pred_df[c])
+            ]
+            if not numeric_cols:
+                raise ValueError(
+                    f"Could not infer prediction column from Chronos output columns: {list(pred_df.columns)}"
+                )
+            pred_col = numeric_cols[0]
+
+        y_hat = float(row[pred_col])
+
+    pred_ts = None
+    if "timestamp" in pred_df.columns:
+        pred_ts = pd.to_datetime(row["timestamp"], errors="coerce")
+    elif "ds" in pred_df.columns:
+        pred_ts = pd.to_datetime(row["ds"], errors="coerce")
+
+    return y_hat, pred_ts, str(pred_col)
 
 
 def rolling_one_step_predictions(
@@ -32,6 +59,7 @@ def rolling_one_step_predictions(
     test_df: pd.DataFrame,
     lookback_window: int = 30,
     quantile_levels: List[float] | None = None,
+    debug_first_n: int = 0,
 ) -> pd.DataFrame:
     """
     Run rolling one-step predictions per basin with observed-history updates.
@@ -50,6 +78,7 @@ def rolling_one_step_predictions(
 
     hist_by_id = {k: g.copy() for k, g in context_df.groupby("id", sort=False)}
     out_rows = []
+    debug_logs = []
 
     # Iterate per basin and roll forward using actual past observations.
     for basin_id, g_test in tqdm(test_df.groupby("id", sort=False), desc="Rolling inference"):
@@ -58,7 +87,7 @@ def rolling_one_step_predictions(
         if history.empty:
             continue
 
-        for _, row in g_test.iterrows():
+        for step_idx, (_, row) in enumerate(g_test.iterrows()):
             context_slice = history.tail(lookback_window)
             pred_df = pipeline.predict_df(
                 context_slice,
@@ -68,7 +97,14 @@ def rolling_one_step_predictions(
                 timestamp_column="timestamp",
                 target="target",
             )
-            y_hat = _extract_point_forecast(pred_df)
+            y_hat, pred_ts, pred_col = _extract_point_forecast(pred_df)
+            actual_ts = pd.to_datetime(row["timestamp"], errors="coerce")
+            ts_aligned = bool(
+                pred_ts is not None
+                and pd.notna(pred_ts)
+                and pd.notna(actual_ts)
+                and pred_ts == actual_ts
+            )
 
             out_rows.append(
                 {
@@ -76,8 +112,26 @@ def rolling_one_step_predictions(
                     "timestamp": row["timestamp"],
                     "actual": float(row["target"]),
                     "predicted": y_hat,
+                    "pred_timestamp": pred_ts,
+                    "prediction_column": pred_col,
+                    "timestamp_aligned": ts_aligned,
                 }
             )
+
+            if len(debug_logs) < debug_first_n:
+                debug_logs.append(
+                    {
+                        "id": basin_id,
+                        "step_idx": int(step_idx),
+                        "history_last_timestamp": context_slice["timestamp"].max(),
+                        "actual_timestamp": actual_ts,
+                        "pred_timestamp": pred_ts,
+                        "prediction_column": pred_col,
+                        "pred_df_columns": [str(c) for c in pred_df.columns],
+                        "predicted_value": y_hat,
+                        "actual_value": float(row["target"]),
+                    }
+                )
 
             # Append actual observation so next one-step forecast uses true history.
             history = pd.concat(
@@ -90,4 +144,9 @@ def rolling_one_step_predictions(
                 ignore_index=True,
             )
 
-    return pd.DataFrame(out_rows)
+    out_df = pd.DataFrame(out_rows)
+    if debug_first_n > 0 and debug_logs:
+        print("Rolling inference debug samples:")
+        for item in debug_logs:
+            print(item)
+    return out_df
