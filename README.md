@@ -65,6 +65,11 @@ Artifacts:
 - `results/benchmark_results.json` (machine-readable metric report)
 - `results/predictions_test.csv` (prediction rows used for RMSE)
 - `results/figures/actual_vs_predicted.png` (visualization)
+- `results/figures/actual_vs_predicted_visualization.png` (actual vs predicted visualization)
+
+### Actual vs Predicted Visualization
+
+![Actual vs Predicted Visualization](results/figures/actual_vs_predicted_visualization.png)
 
 Before running the notebook, `benchmark_results.json` contains template values (`null` where run output is needed). After execution, it is overwritten with actual results.
 

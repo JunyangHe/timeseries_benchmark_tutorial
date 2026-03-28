@@ -18,3 +18,4 @@ data/processed/*
 # Results artifacts
 results/figures/*
 !results/figures/.gitkeep
+!results/figures/actual_vs_predicted_visualization.png
