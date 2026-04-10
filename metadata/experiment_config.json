@@ -6,16 +6,17 @@
   "input_mode": "univariate",
   "lookback_window": 30,
   "forecast_horizon": 1,
-  "evaluation_metrics": [
-    "rmse"
-  ],
-  "execution_environment": "Google Colab (GPU preferred, CPU fallback)",
-  "reference_baseline_for_skill_score": "not_used",
+  "evaluation_metric": "rmse",
+  "execution_environment": "google_colab",
   "model_parameters": {
     "prediction_length": 1,
     "quantile_levels": [
       0.5
     ],
-    "device_preference": "cuda_if_available_else_cpu"
+    "device_preference": "cuda_if_available_else_cpu",
+    "split_strategy": "location_holdout_random",
+    "train_location_ratio": 0.8,
+    "test_location_ratio": 0.2,
+    "split_random_seed": 42
   }
 }

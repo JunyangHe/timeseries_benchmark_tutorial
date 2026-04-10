@@ -39,7 +39,7 @@ Preprocessing decisions:
 - drop unnamed index-like first column
 - forward-fill missing values within each basin
 - use only target history (`QObs(mm/d)`) as model input (strictly univariate)
-- split each basin chronologically: 80% train, 10% validation, 10% test
+- location holdout split by `basin_id`: 80% train locations, 20% test locations (random seed 42)
 
 ## Experiment process
 
@@ -47,9 +47,9 @@ Preprocessing decisions:
 2. Load CSV from local path or uploaded Colab file.
 3. Standardize schema and preprocess data.
 4. Build Chronos-compatible dataframe with columns: `id`, `timestamp`, `target`.
-5. Run rolling one-step inference on each basin using a 30-day lookback window.
+5. Run zero-shot rolling one-step inference with 30-day lookback window.
 6. Compute overall RMSE on the test split.
-7. Save machine-readable outputs to `metadata/` and `results/`.
+7. Save machine-readable outputs to `metadata/experiment_config.json` and `results/benchmark_results.json`.
 8. Save Actual vs Predicted visualization under `results/figures/`.
 
 Notes:
@@ -73,11 +73,18 @@ Artifacts:
 
 Before running the notebook, `benchmark_results.json` contains template values (`null` where run output is needed). After execution, it is overwritten with actual results.
 
+## Findings and discussion
+
+- The CAMELS-US listing and local file usage are consistent with a daily time column (`Year_Mnth_Day`), location identifier (`basin_id`), and streamflow target (`QObs(mm/d)`).
+- Data quality notes: The dataset does not contain missing values. Benchmark results are reasonable.
+- Evaluation scope: RMSE is computed with past-only context for one-step forecasting.
+- Performance interpretation: RMSE should be interpreted in the original streamflow units (`mm/d`), and visual inspection is provided in `results/figures/actual_vs_predicted_visualization.png`.
+
 ## How to set the project environment and replicate the results
 
 ### Option A: Google Colab (recommended)
 
-1. Open `notebooks/final_benchmark_colab.ipynb` in Colab.
+1. Open `notebooks/main.ipynb` in Colab.
 2. Run the setup cell that installs dependencies from `requirements.txt`.
 3. Upload `BasicInputTimeSeries_us.csv` to Colab, or mount Google Drive and point to the file path.
 4. Update config variables in the notebook if needed.
@@ -89,17 +96,16 @@ Before running the notebook, `benchmark_results.json` contains template values (
 1. Create a Python 3.10+ environment.
 2. Install dependencies:
    - `pip install -r requirements.txt`
-3. Launch Jupyter and run `notebooks/final_benchmark_colab.ipynb` (works locally too).
+3. Launch Jupyter and run `notebooks/main.ipynb` (works locally too).
 
 ## Necessary codes and configuration to run your project
 
-- `notebooks/final_benchmark_colab.ipynb`: main end-to-end executable notebook.
-- `src/data_utils.py`: data loading, cleaning, basin-wise splitting, and Chronos-format conversion.
-- `src/metrics.py`: RMSE implementation.
-- `src/plotting.py`: Actual vs Predicted figure generation.
-- `metadata/*.json`: machine-readable dataset/task/experiment metadata.
+- `notebooks/main.ipynb`: main end-to-end executable notebook.
+- `src/data_utils.py`: data loading, cleaning, location-based split, and Chronos-format conversion.
+- `src/eval_utils.py`: rolling zero-shot inference and evaluation helpers.
+- `src/plotting_utils.py`: Actual vs Predicted figure generation.
+- `metadata/experiment_config.json`: machine-readable experiment metadata.
 - `results/benchmark_results.json`: machine-readable benchmark summary.
-- `configs/default_experiment.yaml`: run configuration template.
 - `requirements.txt`: reproducible Python dependencies.
 
 ## Link to your dataset
