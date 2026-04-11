@@ -1,117 +1,159 @@
 # Time series benchmarking tutorial (Hydrology CAMELS US with Chronos 2)
 
-## Project title, introduction, and team members
+<h3 align="center"><strong>DS5110 Final Project Example (Hydrology)</strong></h3>
+<p align="center"><strong>Junyang He</strong></p>
 
-This repository is a DS5110 final project framework for benchmarking single-step time series forecasting on hydrology data from CAMELS-US using Chronos-2.
+---
 
-Team member:
-- Junyang He
+## Table of Contents
+- [Introduction](#introduction)
+- [Data](#data)
+- [Methodology](#methodology)
+- [Experiment Process](#experiment-process)
+- [Repository Structure](#repository-structure)
+- [Results](#results)
+- [Findings and Discussion](#findings-and-discussion)
+- [Data Quality and Possible Anomalies](#data-quality-and-possible-anomalies)
+- [How to Set the Project Environment and Replicate Results](#how-to-set-the-project-environment-and-replicate-results)
+- [Dataset and Model Links](#dataset-and-model-links)
+- [Conclusion and Future Improvements](#conclusion-and-future-improvements)
 
-## Problem Statement
+---
 
-The project evaluates how well a time-series foundation model (Chronos-2) can forecast next-day streamflow across multiple US river basins.  
+## Introduction
+
+This project benchmarks zero-shot timeseries forecasting performance on CAMELS-US hydrology data using Chronos-2 foundation model from Amazon. The objective is to build a reproducible, machine-readable benchmark pipeline that runs in Google Colab to verify the CAMELS-US dataset and quantify the capabilities of the Chronos-2 model.
+
+The project evaluates how well a timeseries foundation model (Chronos-2) can forecast next-day streamflow across 671 US river basins. This study only explores univariate forecasting, which forecasts streamflow `QObs(mm/d)` only with prior available streamflow data within lookback window. We do not leverage any additional exogenous streams or static features in input.
+
 Task definition:
 - Forecast type: single-step forecasting
 - Forecast horizon: 1 day
-- Target variable: `QObs(mm/d)` (observed streamflow)
+- Target variable: `QObs(mm/d)`
 - Input mode: univariate (past target only)
-- Context length (lookback window): 30 days
-- Evaluation metric: RMSE (test split only)
-- Reporting: one overall RMSE aggregated across all test predictions
+- Lookback window: 30 days
+- Evaluation metric: RMSE
+- Reporting: one overall RMSE on held-out test locations
 
-## Data details
+## Data
 
 Dataset source:
 - CAMELS: Catchment Attributes and MEteorology for Large-sample Studies
-- Dataset page: https://zenodo.org/records/15529996
+- Dataset page: `https://zenodo.org/records/15529996`
 
-Input file used in this project:
-- `BasicInputTimeSeries_us.csv`
-- Expected key columns:
-  - `Year_Mnth_Day` (timestamp)
-  - `basin_id` (time-series ID)
-  - `QObs(mm/d)` (target)
-  - the unnamed first column is dropped during preprocessing
+Input file used in this repository:
+- `data/raw/BasicInputTimeSeries_us.csv`
 
-Preprocessing decisions:
-- parse timestamps from `Year_Mnth_Day`
-- sort by `basin_id` and timestamp
-- drop unnamed index-like first column
-- forward-fill missing values within each basin
-- use only target history (`QObs(mm/d)`) as model input (strictly univariate)
-- location holdout split by `basin_id`: 80% train locations, 20% test locations (random seed 42)
+Expected key columns:
+- `Year_Mnth_Day` (timestamp)
+- `basin_id` (location/time-series identifier)
+- `QObs(mm/d)` (streamflow target)
+- unnamed first column (dropped in preprocessing)
 
-## Experiment process
+For streamflow, we selected the interval of 7,031 days, spanning from October 2, 1989, to December 31, 2008. This largely aligns with the start date of a water year (October 1st), as defined by the U.S. Geological Survey. In preprocessing, we parse timestamps from `Year_Mnth_Day`, sort by `basin_id` and timestamp, drop the unnamed index-like first column, remove rows missing required time/target fields, and forward-fill missing values within each basin. The benchmark uses strictly univariate input (`QObs(mm/d)` history) and a location holdout split by `basin_id` (80% train locations, 20% test locations, random seed 42). An analysis of NaNs (missing values) in data revealed no NaN values in time series data, yet some exists in the static exogenous features. Since this benchmark does not involve static exogenous features, we do not perform data interpolation or categorical encoding on static features.
+
+Note: train test split is not required since we are doing inference only (no training), we evaluate on 20% test data split by location for the purpose of demonstration.
+
+## Methodology
+
+Model:
+- Chronos-2 (`amazon/chronos-2`) for zero-shot forecasting
+
+Inference protocol:
+- rolling one-step prediction with past-only context
+- context window: 30 steps
+- for held-out locations with no prior context, the evaluation loop optionally seeds with early test history (`allow_test_cold_start=True`) before scoring subsequent points
+
+Metric:
+- RMSE:
+  - `RMSE = sqrt(mean((y_true - y_pred)^2))`
+
+## Experiment Process
 
 1. Install dependencies in Colab.
-2. Load CSV from local path or uploaded Colab file.
-3. Standardize schema and preprocess data.
-4. Build Chronos-compatible dataframe with columns: `id`, `timestamp`, `target`.
-5. Run zero-shot rolling one-step inference with 30-day lookback window.
-6. Compute overall RMSE on the test split.
-7. Save machine-readable outputs to `metadata/experiment_config.json` and `results/benchmark_results.json`.
-8. Save Actual vs Predicted visualization under `results/figures/`.
+2. Load raw CSV and validate schema.
+3. Preprocess and save processed artifacts to `data/processed/`.
+4. Create location-based train/test split by `basin_id`.
+5. Run Chronos-2 rolling one-step inference.
+6. Compute and report RMSE on test evaluation points.
+7. Save outputs to standardized JSON/CSV and figures.
 
-Notes:
-- Chronos-2 is used as a pretrained foundation model for forecasting inference.
-- The run is global over all basins through shared preprocessing and evaluation pipeline.
+## Repository Structure
+
+```text
+timeseries_benchmark_tutorial/
+├── README.md
+├── requirements.txt
+├── data/
+│   ├── raw/
+│   └── processed/
+├── metadata/
+│   ├── experiment_config.json
+│   └── ts_characteristics.json
+├── results/
+│   ├── benchmark_results.json
+│   ├── predictions_test.csv
+│   └── figures/
+├── notebooks/
+│   ├── main.ipynb
+│   └── final_benchmark_colab.ipynb
+└── src/
+    ├── data_utils.py
+    ├── eval_utils.py
+    ├── plotting_utils.py
+    └── metrics.py
+```
 
 ## Results
 
-Primary metric:
-- RMSE on test set (overall)
-
-Artifacts:
-- `results/benchmark_results.json` (machine-readable metric report)
-- `results/predictions_test.csv` (prediction rows used for RMSE)
-- `results/figures/actual_vs_predicted.png` (visualization)
-- `results/figures/actual_vs_predicted_visualization.png` (actual vs predicted visualization)
-
+| Quantity | Value |
+|---|---|
+| Dataset | CAMELS-US |
+| Model | chronos-2 |
+| Target variable | `QObs(mm/d)` |
+| Lookback window | 30 |
+| Forecast horizon | 1 |
+| RMSE | **2.451361768118934** |
 ### Actual vs Predicted Visualization
 
 ![Actual vs Predicted Visualization](results/figures/actual_vs_predicted_visualization.png)
 
-Before running the notebook, `benchmark_results.json` contains template values (`null` where run output is needed). After execution, it is overwritten with actual results.
+Note:
+- Before execution, `benchmark_results.json` contains template values (`rmse: null`).
+- After execution, notebook cells overwrite with run outputs.
 
-## Findings and discussion
+## Findings and Discussion
 
-- The CAMELS-US listing and local file usage are consistent with a daily time column (`Year_Mnth_Day`), location identifier (`basin_id`), and streamflow target (`QObs(mm/d)`).
-- Data quality notes: The dataset does not contain missing values. Benchmark results are reasonable.
-- Evaluation scope: RMSE is computed with past-only context for one-step forecasting.
-- Performance interpretation: RMSE should be interpreted in the original streamflow units (`mm/d`), and visual inspection is provided in `results/figures/actual_vs_predicted_visualization.png`.
+The benchmark achieved an overall **RMSE of 2.4514** on the location-holdout test set (`20%` unseen basins), indicating that Chronos-2 captures the dominant streamflow dynamics reasonably well in a zero-shot setting. From the Actual vs Predicted visualization, the model captures recurring seasonal patterns and baseline fluctuations closely, with predicted values generally following the same temporal structure as observations. The main error appears during sharp peak-flow events, where predictions are smoother and tend to under-estimate extreme spikes. This is consistent with the observed spread around high-flow periods and likely contributes most of the RMSE. Overall, the results suggest strong trend-level generalization across unseen locations, with remaining performance gaps concentrated in high-variance or extreme-event regimes.
 
-## How to set the project environment and replicate the results
+## Data Quality and Possible Anomalies
+CAMELS-US Hydrology data exhibits clear seasonal patterns, with extremely long sequence lengths available (20 years of daily data), across 671 locations. These characteristics makes it ideal for time series experiments. Furthermore, the timeseries streams have no missing values. The minimal missing values in the static features can be trivially interpolated with techniques like forward-filling without significantly breaking patterns.
 
-### Option A: Google Colab (recommended)
+Even with strong overall quality, several anomaly modes remain important for interpretation. Streamflow is typically right-skewed, so rare high-flow peaks can dominate RMSE and make performance look worse than visual fit during normal-flow periods. Cross-basin heterogeneity is also high, good fit on the current set of 20% locations does not guarantee good fit on all locations.
+
+
+## How to Set the Project Environment and Replicate Results
+
+### Google Colab (recommended)
 
 1. Open `notebooks/main.ipynb` in Colab.
-2. Run the setup cell that installs dependencies from `requirements.txt`.
-3. Upload `BasicInputTimeSeries_us.csv` to Colab, or mount Google Drive and point to the file path.
-4. Update config variables in the notebook if needed.
-5. Run all cells.
-6. Inspect saved outputs under `results/` and `metadata/`.
+2. Run setup cells (`git clone`, `%cd`, `pip install`, `git pull`).
+3. Ensure raw file path resolves to `data/raw/BasicInputTimeSeries_us.csv` (or set `INPUT_CSV_PATH` env var).
+4. Run all cells top-to-bottom.
+5. Verify outputs under `results/` and `metadata/`.
 
-### Option B: Local Jupyter
 
-1. Create a Python 3.10+ environment.
-2. Install dependencies:
-   - `pip install -r requirements.txt`
-3. Launch Jupyter and run `notebooks/main.ipynb` (works locally too).
+## Dataset and Model Links
 
-## Necessary codes and configuration to run your project
+- Dataset: `https://zenodo.org/records/15529996`
+- Model: `https://huggingface.co/amazon/chronos-2`
 
-- `notebooks/main.ipynb`: main end-to-end executable notebook.
-- `src/data_utils.py`: data loading, cleaning, location-based split, and Chronos-format conversion.
-- `src/eval_utils.py`: rolling zero-shot inference and evaluation helpers.
-- `src/plotting_utils.py`: Actual vs Predicted figure generation.
-- `metadata/experiment_config.json`: machine-readable experiment metadata.
-- `results/benchmark_results.json`: machine-readable benchmark summary.
-- `requirements.txt`: reproducible Python dependencies.
+## Conclusion and Future Improvements
 
-## Link to your dataset
+Current pipeline provides a reproducible baseline for zero-shot single-step streamflow forecasting on CAMELS-US with standardized outputs.
 
-- CAMELS-US dataset page: https://zenodo.org/records/15529996
-
-## Model reference
-
-- Chronos-2 model page: https://huggingface.co/amazon/chronos-2
+Possible improvements:
+- try multivariate input (include all available timeseries streams and static features)
+- add explicit naive baseline comparison for context
+- add per-basin RMSE diagnostics
+- evaluate alternative lookback sizes and model parameters

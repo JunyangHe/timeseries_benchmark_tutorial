@@ -5,16 +5,13 @@
   "lookback_window": 30,
   "forecast_horizon": 1,
   "model_parameters": {
+    "model_id": "amazon/chronos-2",
     "prediction_length": 1,
     "quantile_levels": [
       0.5
     ],
-    "device_preference": "cuda_if_available_else_cpu",
-    "split_strategy": "location_holdout_random",
-    "train_location_ratio": 0.8,
-    "test_location_ratio": 0.2,
-    "split_random_seed": 42
+    "device_map": "cuda"
   },
-  "rmse": null,
-  "notes": "Template file. Run notebooks/main.ipynb to populate rmse and evaluation details."
+  "rmse": 2.451361768118934,
+  "notes": "Overall RMSE on location-holdout test split (20% randomly selected basin IDs)."
 }
